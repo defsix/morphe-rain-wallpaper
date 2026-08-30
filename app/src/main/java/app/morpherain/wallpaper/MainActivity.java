@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
         addSeek("Colour-cycle period", 10, 120, Config.cycleSeconds(prefs),
                 value -> prefs.edit().putInt(Config.KEY_CYCLE_SECONDS, value).apply(), " s");
 
-        TextView imageHelp = text("Choose any image and Morphe Rain will build a multi-stop gradient from it. The extractor now favours vivid colours over large muted background areas.", 13, Color.LTGRAY);
+        TextView imageHelp = text("Choose any image and Morphe Rain will build a multi-stop gradient from it. The extractor favours vivid colours over large muted background areas.", 13, Color.LTGRAY);
         imageHelp.setPadding(0, dp(14), 0, dp(8));
         content.addView(imageHelp);
 
@@ -106,6 +106,39 @@ public class MainActivity extends Activity {
         paletteLabel.setPadding(0, dp(10), 0, dp(5));
         content.addView(paletteLabel);
         addPalettePreview(Config.imagePalette(prefs));
+
+        addSection("Background");
+        TextView backgroundHelp = text("Use a plain colour behind the rain, or reuse the palette-source image. Image opacity controls how strongly the photo shows through; the selected solid colour remains underneath it.", 13, Color.LTGRAY);
+        backgroundHelp.setPadding(0, 0, 0, dp(8));
+        content.addView(backgroundHelp);
+
+        Spinner backgroundMode = new Spinner(this);
+        String[] backgroundModes = {"Solid colour", "Palette source image"};
+        ArrayAdapter<String> backgroundAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_dropdown_item, backgroundModes);
+        backgroundMode.setAdapter(backgroundAdapter);
+        backgroundMode.setSelection(Math.max(0, Math.min(backgroundModes.length - 1,
+                Config.backgroundMode(prefs))));
+        backgroundMode.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> {
+            if (position == Config.BACKGROUND_IMAGE && Config.imageUri(prefs) == null) {
+                Toast.makeText(this, "Choose a palette image first", Toast.LENGTH_SHORT).show();
+                prefs.edit().putInt(Config.KEY_BACKGROUND_MODE, Config.BACKGROUND_SOLID).apply();
+                backgroundMode.setSelection(Config.BACKGROUND_SOLID);
+            } else {
+                prefs.edit().putInt(Config.KEY_BACKGROUND_MODE, position).apply();
+            }
+        }));
+        content.addView(backgroundMode, matchWrap());
+
+        addBackgroundColorControl("Background colour", Config.backgroundColor(prefs));
+        addSeek("Background image opacity", 0, 100, Config.backgroundImageOpacity(prefs),
+                value -> prefs.edit().putInt(Config.KEY_BACKGROUND_IMAGE_OPACITY, value).apply(), "%");
+
+        if (Config.imageUri(prefs) == null) {
+            TextView noImage = text("No palette-source image is currently stored. Select one in the Colour section to enable image background mode.", 12, Color.GRAY);
+            noImage.setPadding(0, dp(2), 0, 0);
+            content.addView(noImage);
+        }
 
         addSection("Hidden phrases");
         TextView phraseHelp = text("One phrase per line. These are inserted vertically into the rain at the frequency set below. Short phrases usually look best.", 13, Color.LTGRAY);
@@ -184,7 +217,7 @@ public class MainActivity extends Activity {
         });
         content.addView(reset);
 
-        TextView note = text("Original preset: #1E5AA8 → #00AFAE, 14dp monospace glyphs, 26-cell tails, 2–3 streams per column, 12% phrase chance and parallax enabled.", 12, Color.GRAY);
+        TextView note = text("Original preset: #1E5AA8 → #00AFAE, black background, 14dp monospace glyphs, 26-cell tails, 2–3 streams per column, 12% phrase chance and parallax enabled.", 12, Color.GRAY);
         note.setPadding(0, dp(18), 0, 0);
         content.addView(note);
 
@@ -203,6 +236,20 @@ public class MainActivity extends Activity {
                     .putInt(prefKey, color)
                     .putInt(Config.KEY_COLOR_MODE, Config.MODE_CUSTOM)
                     .apply();
+            buildUi();
+        }));
+        content.addView(colorButton, matchWrap());
+    }
+
+    private void addBackgroundColorControl(String label, int currentColor) {
+        TextView title = text(label, 14, Color.LTGRAY);
+        title.setPadding(0, dp(12), 0, dp(3));
+        content.addView(title);
+
+        Button colorButton = button(ColorPickerDialog.toHex(currentColor));
+        styleColorButton(colorButton, currentColor);
+        colorButton.setOnClickListener(v -> ColorPickerDialog.show(this, label, currentColor, color -> {
+            prefs.edit().putInt(Config.KEY_BACKGROUND_COLOR, color).apply();
             buildUi();
         }));
         content.addView(colorButton, matchWrap());
@@ -276,6 +323,7 @@ public class MainActivity extends Activity {
                     .remove(Config.KEY_IMAGE_URI)
                     .remove(Config.KEY_IMAGE_PALETTE)
                     .putInt(Config.KEY_COLOR_MODE, Config.MODE_MORPHE)
+                    .putInt(Config.KEY_BACKGROUND_MODE, Config.BACKGROUND_SOLID)
                     .apply();
             buildUi();
         });
