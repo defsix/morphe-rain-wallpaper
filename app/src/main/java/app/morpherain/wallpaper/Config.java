@@ -22,6 +22,10 @@ final class Config {
     static final String KEY_BACKGROUND_MODE = "background_mode";
     static final String KEY_BACKGROUND_COLOR = "background_color";
     static final String KEY_BACKGROUND_IMAGE_OPACITY = "background_image_opacity_percent";
+    static final String KEY_BACKGROUND_FIT_MODE = "background_fit_mode";
+    static final String KEY_BACKGROUND_ZOOM = "background_zoom_percent";
+    static final String KEY_BACKGROUND_OFFSET_X = "background_offset_x";
+    static final String KEY_BACKGROUND_OFFSET_Y = "background_offset_y";
     static final String KEY_SPEED = "speed_percent";
     static final String KEY_GLYPH = "glyph_dp";
     static final String KEY_SPACING = "spacing_percent";
@@ -40,6 +44,10 @@ final class Config {
 
     static final int BACKGROUND_SOLID = 0;
     static final int BACKGROUND_IMAGE = 1;
+
+    static final int FIT_FILL = 0;
+    static final int FIT_INSIDE = 1;
+    static final int FIT_MANUAL = 2;
 
     static final int MORPHE_START = Color.rgb(0x1E, 0x5A, 0xA8);
     static final int MORPHE_END = Color.rgb(0x00, 0xAF, 0xAE);
@@ -66,6 +74,18 @@ final class Config {
     static int backgroundColor(SharedPreferences p) { return p.getInt(KEY_BACKGROUND_COLOR, Color.BLACK); }
     static int backgroundImageOpacity(SharedPreferences p) {
         return Math.max(0, Math.min(100, p.getInt(KEY_BACKGROUND_IMAGE_OPACITY, 35)));
+    }
+    static int backgroundFitMode(SharedPreferences p) {
+        return Math.max(FIT_FILL, Math.min(FIT_MANUAL, p.getInt(KEY_BACKGROUND_FIT_MODE, FIT_FILL)));
+    }
+    static int backgroundZoomPercent(SharedPreferences p) {
+        return Math.max(50, Math.min(200, p.getInt(KEY_BACKGROUND_ZOOM, 100)));
+    }
+    static int backgroundOffsetX(SharedPreferences p) {
+        return Math.max(-100, Math.min(100, p.getInt(KEY_BACKGROUND_OFFSET_X, 0)));
+    }
+    static int backgroundOffsetY(SharedPreferences p) {
+        return Math.max(-100, Math.min(100, p.getInt(KEY_BACKGROUND_OFFSET_Y, 0)));
     }
 
     static int customStart(SharedPreferences p) {
