@@ -6,11 +6,13 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +20,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -83,13 +86,21 @@ public class MainActivity extends Activity {
         addSeek("Colour-cycle period", 10, 120, Config.cycleSeconds(prefs),
                 value -> prefs.edit().putInt(Config.KEY_CYCLE_SECONDS, value).apply(), " s");
 
-        TextView imageHelp = text("Choose any image and Morphe Rain will extract a small palette from its dominant colours, then spread those colours across the Matrix columns as a multi-stop gradient.", 13, Color.LTGRAY);
+        TextView imageHelp = text("Choose any image and Morphe Rain will build a multi-stop gradient from it. The extractor now favours vivid colours over large muted background areas.", 13, Color.LTGRAY);
         imageHelp.setPadding(0, dp(14), 0, dp(8));
         content.addView(imageHelp);
+
+        addSeek("Palette vividness", 0, 100, Config.paletteVividness(prefs),
+                value -> prefs.edit().putInt(Config.KEY_PALETTE_VIVIDNESS, value).apply(), "%");
+        TextView vividHelp = text("Higher values favour saturated, bright colours and reduce the influence of dark or grey areas. 75% is the recommended default. Re-extract after changing it.", 12, Color.GRAY);
+        vividHelp.setPadding(0, 0, 0, dp(8));
+        content.addView(vividHelp);
 
         Button imageButton = button("Choose image & generate palette");
         imageButton.setOnClickListener(v -> choosePaletteImage());
         content.addView(imageButton);
+
+        addImageSourcePreview();
 
         TextView paletteLabel = text("Current image palette", 13, Color.GRAY);
         paletteLabel.setPadding(0, dp(10), 0, dp(5));
@@ -217,6 +228,61 @@ public class MainActivity extends Activity {
         content.addView(row, matchWrap());
     }
 
+    private void addImageSourcePreview() {
+        String uriText = Config.imageUri(prefs);
+        if (uriText == null || uriText.trim().isEmpty()) return;
+
+        Uri uri;
+        try {
+            uri = Uri.parse(uriText);
+        } catch (Exception e) {
+            return;
+        }
+
+        String displayName = getDisplayName(uri);
+        TextView sourceLabel = text("Palette source: " + displayName, 13, Color.LTGRAY);
+        sourceLabel.setPadding(0, dp(12), 0, dp(6));
+        content.addView(sourceLabel);
+
+        try {
+            Bitmap preview = decodeSampledBitmap(uri, 720);
+            if (preview != null) {
+                ImageView image = new ImageView(this);
+                image.setImageBitmap(preview);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setAdjustViewBounds(false);
+                image.setBackgroundColor(Color.rgb(20, 20, 20));
+                content.addView(image, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(180)));
+            }
+        } catch (IOException ignored) {
+            TextView unavailable = text("Image preview unavailable. The saved palette will still work.", 12, Color.GRAY);
+            content.addView(unavailable);
+        }
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.setPadding(0, dp(6), 0, 0);
+        content.addView(buttons, matchWrap());
+
+        Button reExtract = button("Re-extract palette");
+        reExtract.setOnClickListener(v -> extractPaletteFromUri(uri));
+        buttons.addView(reExtract, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button clear = button("Clear image");
+        clear.setOnClickListener(v -> {
+            prefs.edit()
+                    .remove(Config.KEY_IMAGE_URI)
+                    .remove(Config.KEY_IMAGE_PALETTE)
+                    .putInt(Config.KEY_COLOR_MODE, Config.MODE_MORPHE)
+                    .apply();
+            buildUi();
+        });
+        buttons.addView(clear, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    }
+
     private void choosePaletteImage() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -234,20 +300,26 @@ public class MainActivity extends Activity {
             getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (SecurityException ignored) {}
 
-        Toast.makeText(this, "Extracting colours…", Toast.LENGTH_SHORT).show();
+        prefs.edit().putString(Config.KEY_IMAGE_URI, uri.toString()).apply();
+        extractPaletteFromUri(uri);
+    }
+
+    private void extractPaletteFromUri(Uri uri) {
+        Toast.makeText(this, "Extracting vivid colours…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             Bitmap bitmap = null;
             try {
-                bitmap = decodeSampledBitmap(uri, 512);
+                bitmap = decodeSampledBitmap(uri, 640);
                 if (bitmap == null) throw new IOException("Could not decode image");
-                int[] palette = PaletteExtractor.extract(bitmap, 5);
+                int[] palette = PaletteExtractor.extract(bitmap, 5, Config.paletteVividness(prefs));
                 prefs.edit()
+                        .putString(Config.KEY_IMAGE_URI, uri.toString())
                         .putString(Config.KEY_IMAGE_PALETTE, Config.encodePalette(palette))
                         .putInt(Config.KEY_COLOR_MODE, Config.MODE_IMAGE)
                         .apply();
                 runOnUiThread(() -> {
                     buildUi();
-                    Toast.makeText(this, "Image palette applied", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Vivid image palette applied", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> Toast.makeText(this, "Could not read that image", Toast.LENGTH_LONG).show());
@@ -255,6 +327,25 @@ public class MainActivity extends Activity {
                 if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
             }
         }, "palette-extractor").start();
+    }
+
+    private String getDisplayName(Uri uri) {
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (column >= 0) {
+                    String value = cursor.getString(column);
+                    if (value != null && !value.trim().isEmpty()) return value;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        String last = uri.getLastPathSegment();
+        return last == null ? "selected image" : last;
     }
 
     private Bitmap decodeSampledBitmap(Uri uri, int maxSide) throws IOException {
