@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Morphe Rain</string>
+    <string name="wallpaper_name">Morphe Rain Live Wallpaper</string>
+    <string name="wallpaper_description">Unofficial live wallpaper based on Morphe Manager's GPL-3.0 Matrix Easter egg.</string>
+</resources>
