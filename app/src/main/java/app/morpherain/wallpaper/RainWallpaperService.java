@@ -269,19 +269,35 @@ public class RainWallpaperService extends WallpaperService {
             int bitmapHeight = backgroundBitmap.getHeight();
             if (bitmapWidth <= 0 || bitmapHeight <= 0 || width <= 0 || height <= 0) return;
 
-            float sourceAspect = bitmapWidth / (float) bitmapHeight;
-            float targetAspect = width / (float) height;
-            if (sourceAspect > targetAspect) {
-                int cropWidth = Math.max(1, Math.round(bitmapHeight * targetAspect));
-                int left = Math.max(0, (bitmapWidth - cropWidth) / 2);
-                backgroundSource.set(left, 0, Math.min(bitmapWidth, left + cropWidth), bitmapHeight);
+            backgroundSource.set(0, 0, bitmapWidth, bitmapHeight);
+
+            float scaleX = width / (float) bitmapWidth;
+            float scaleY = height / (float) bitmapHeight;
+            int fitMode = Config.backgroundFitMode(prefs);
+            float scale;
+
+            if (fitMode == Config.FIT_INSIDE) {
+                scale = Math.min(scaleX, scaleY);
+            } else if (fitMode == Config.FIT_MANUAL) {
+                float fitted = Math.min(scaleX, scaleY);
+                scale = fitted * (Config.backgroundZoomPercent(prefs) / 100f);
             } else {
-                int cropHeight = Math.max(1, Math.round(bitmapWidth / targetAspect));
-                int top = Math.max(0, (bitmapHeight - cropHeight) / 2);
-                backgroundSource.set(0, top, bitmapWidth, Math.min(bitmapHeight, top + cropHeight));
+                scale = Math.max(scaleX, scaleY);
             }
 
-            backgroundDestination.set(0f, 0f, width, height);
+            float drawWidth = bitmapWidth * scale;
+            float drawHeight = bitmapHeight * scale;
+            float left = (width - drawWidth) / 2f;
+            float top = (height - drawHeight) / 2f;
+
+            if (fitMode == Config.FIT_MANUAL) {
+                float horizontalRange = Math.abs(width - drawWidth) / 2f;
+                float verticalRange = Math.abs(height - drawHeight) / 2f;
+                left += horizontalRange * (Config.backgroundOffsetX(prefs) / 100f);
+                top += verticalRange * (Config.backgroundOffsetY(prefs) / 100f);
+            }
+
+            backgroundDestination.set(left, top, left + drawWidth, top + drawHeight);
             backgroundPaint.setAlpha(Math.max(0, Math.min(255, Math.round(opacity * 2.55f))));
             canvas.drawBitmap(backgroundBitmap, backgroundSource, backgroundDestination, backgroundPaint);
             backgroundPaint.setAlpha(255);
