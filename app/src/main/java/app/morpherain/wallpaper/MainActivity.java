@@ -5,7 +5,11 @@ import android.app.WallpaperManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -13,13 +17,20 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 public class MainActivity extends Activity {
+    private static final int REQUEST_PICK_IMAGE = 4102;
+
     private SharedPreferences prefs;
     private LinearLayout content;
 
@@ -42,7 +53,7 @@ public class MainActivity extends Activity {
         TextView title = text("Morphe Rain", 28, Color.WHITE);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         content.addView(title);
-        TextView subtitle = text("Standalone live wallpaper using the visual recipe from Morphe Manager's GPL-3.0 Matrix Easter egg.", 14, Color.LTGRAY);
+        TextView subtitle = text("Standalone live wallpaper using the visual recipe from the GPL-3.0 Matrix Easter egg in Morphe Manager.", 14, Color.LTGRAY);
         subtitle.setPadding(0, dp(6), 0, dp(20));
         content.addView(subtitle);
 
@@ -52,20 +63,73 @@ public class MainActivity extends Activity {
 
         addSection("Colour");
         Spinner mode = new Spinner(this);
-        String[] modes = {"Morphe blue → cyan", "Classic green", "Custom gradient", "Slow colour cycle"};
+        String[] modes = {
+                "Morphe blue → cyan",
+                "Classic green",
+                "Custom gradient",
+                "Slow colour cycle",
+                "Image-derived palette"
+        };
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, modes);
         mode.setAdapter(adapter);
-        mode.setSelection(Config.mode(prefs));
+        mode.setSelection(Math.max(0, Math.min(modes.length - 1, Config.mode(prefs))));
         mode.setOnItemSelectedListener(new SimpleItemSelectedListener(position ->
                 prefs.edit().putInt(Config.KEY_COLOR_MODE, position).apply()));
         content.addView(mode, matchWrap());
 
-        addSeek("Custom start hue", 0, 359, prefs.getInt(Config.KEY_START_HUE, 210),
-                value -> prefs.edit().putInt(Config.KEY_START_HUE, value).apply(), "°");
-        addSeek("Custom end hue", 0, 359, prefs.getInt(Config.KEY_END_HUE, 180),
-                value -> prefs.edit().putInt(Config.KEY_END_HUE, value).apply(), "°");
+        addColorControl("Custom start colour", Config.customStart(prefs), Config.KEY_START_COLOR);
+        addColorControl("Custom end colour", Config.customEnd(prefs), Config.KEY_END_COLOR);
+
         addSeek("Colour-cycle period", 10, 120, Config.cycleSeconds(prefs),
                 value -> prefs.edit().putInt(Config.KEY_CYCLE_SECONDS, value).apply(), " s");
+
+        TextView imageHelp = text("Choose any image and Morphe Rain will extract a small palette from its dominant colours, then spread those colours across the Matrix columns as a multi-stop gradient.", 13, Color.LTGRAY);
+        imageHelp.setPadding(0, dp(14), 0, dp(8));
+        content.addView(imageHelp);
+
+        Button imageButton = button("Choose image & generate palette");
+        imageButton.setOnClickListener(v -> choosePaletteImage());
+        content.addView(imageButton);
+
+        TextView paletteLabel = text("Current image palette", 13, Color.GRAY);
+        paletteLabel.setPadding(0, dp(10), 0, dp(5));
+        content.addView(paletteLabel);
+        addPalettePreview(Config.imagePalette(prefs));
+
+        addSection("Hidden phrases");
+        TextView phraseHelp = text("One phrase per line. These are inserted vertically into the rain at the frequency set below. Short phrases usually look best.", 13, Color.LTGRAY);
+        phraseHelp.setPadding(0, 0, 0, dp(8));
+        content.addView(phraseHelp);
+
+        EditText phrases = new EditText(this);
+        phrases.setText(Config.phrasesText(prefs));
+        phrases.setTextColor(Color.WHITE);
+        phrases.setHintTextColor(Color.GRAY);
+        phrases.setHint("USE MORPHE\nNO ADS\nWAKE UP\nPATCHED");
+        phrases.setMinLines(4);
+        phrases.setMaxLines(10);
+        phrases.setGravity(Gravity.TOP | Gravity.START);
+        phrases.setBackgroundTintList(ColorStateList.valueOf(Color.rgb(0, 175, 174)));
+        content.addView(phrases, matchWrap());
+
+        LinearLayout phraseButtons = new LinearLayout(this);
+        phraseButtons.setOrientation(LinearLayout.HORIZONTAL);
+        phraseButtons.setGravity(Gravity.END);
+        phraseButtons.setPadding(0, dp(6), 0, 0);
+        content.addView(phraseButtons, matchWrap());
+
+        Button restorePhrases = button("Original phrases");
+        restorePhrases.setOnClickListener(v -> phrases.setText(Config.DEFAULT_PHRASES));
+        phraseButtons.addView(restorePhrases, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button savePhrases = button("Save phrases");
+        savePhrases.setOnClickListener(v -> {
+            prefs.edit().putString(Config.KEY_PHRASES, phrases.getText().toString()).apply();
+            Toast.makeText(this, "Hidden phrases updated", Toast.LENGTH_SHORT).show();
+        });
+        phraseButtons.addView(savePhrases, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         addSection("Rain");
         addSeek("Speed", 25, 200, prefs.getInt(Config.KEY_SPEED, 100),
@@ -109,11 +173,108 @@ public class MainActivity extends Activity {
         });
         content.addView(reset);
 
-        TextView note = text("Default preset: #1E5AA8 → #00AFAE, 14dp monospace glyphs, 26-cell tails, 2–3 streams per column, 12% phrase chance and parallax enabled.", 12, Color.GRAY);
+        TextView note = text("Original preset: #1E5AA8 → #00AFAE, 14dp monospace glyphs, 26-cell tails, 2–3 streams per column, 12% phrase chance and parallax enabled.", 12, Color.GRAY);
         note.setPadding(0, dp(18), 0, 0);
         content.addView(note);
 
         setContentView(scroll);
+    }
+
+    private void addColorControl(String label, int currentColor, String prefKey) {
+        TextView title = text(label, 14, Color.LTGRAY);
+        title.setPadding(0, dp(12), 0, dp(3));
+        content.addView(title);
+
+        Button colorButton = button(ColorPickerDialog.toHex(currentColor));
+        styleColorButton(colorButton, currentColor);
+        colorButton.setOnClickListener(v -> ColorPickerDialog.show(this, label, currentColor, color -> {
+            prefs.edit()
+                    .putInt(prefKey, color)
+                    .putInt(Config.KEY_COLOR_MODE, Config.MODE_CUSTOM)
+                    .apply();
+            buildUi();
+        }));
+        content.addView(colorButton, matchWrap());
+    }
+
+    private void styleColorButton(Button button, int color) {
+        button.setBackgroundTintList(ColorStateList.valueOf(color));
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+        button.setTextColor(luminance > 0.62 ? Color.BLACK : Color.WHITE);
+    }
+
+    private void addPalettePreview(int[] colors) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, 0, 0, dp(4));
+        for (int color : colors) {
+            View swatch = new View(this);
+            swatch.setBackgroundColor(color);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+            lp.setMargins(dp(1), 0, dp(1), 0);
+            row.addView(swatch, lp);
+        }
+        content.addView(row, matchWrap());
+    }
+
+    private void choosePaletteImage() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_PICK_IMAGE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {}
+
+        Toast.makeText(this, "Extracting colours…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            Bitmap bitmap = null;
+            try {
+                bitmap = decodeSampledBitmap(uri, 512);
+                if (bitmap == null) throw new IOException("Could not decode image");
+                int[] palette = PaletteExtractor.extract(bitmap, 5);
+                prefs.edit()
+                        .putString(Config.KEY_IMAGE_PALETTE, Config.encodePalette(palette))
+                        .putInt(Config.KEY_COLOR_MODE, Config.MODE_IMAGE)
+                        .apply();
+                runOnUiThread(() -> {
+                    buildUi();
+                    Toast.makeText(this, "Image palette applied", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Could not read that image", Toast.LENGTH_LONG).show());
+            } finally {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            }
+        }, "palette-extractor").start();
+    }
+
+    private Bitmap decodeSampledBitmap(Uri uri, int maxSide) throws IOException {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        try (InputStream input = getContentResolver().openInputStream(uri)) {
+            if (input == null) return null;
+            BitmapFactory.decodeStream(input, null, bounds);
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+
+        int sample = 1;
+        while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > maxSide) sample *= 2;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sample;
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        try (InputStream input = getContentResolver().openInputStream(uri)) {
+            if (input == null) return null;
+            return BitmapFactory.decodeStream(input, null, options);
+        }
     }
 
     private void openWallpaperPicker() {
