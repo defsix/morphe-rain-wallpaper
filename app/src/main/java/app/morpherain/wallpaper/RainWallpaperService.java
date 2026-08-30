@@ -2,6 +2,7 @@ package app.morpherain.wallpaper;
 
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -14,12 +15,14 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,8 +62,11 @@ public class RainWallpaperService extends WallpaperService {
         private final Random random = new Random();
         private final SharedPreferences prefs = Config.prefs(RainWallpaperService.this);
         private final Paint glyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         private final Rect source = new Rect();
         private final RectF destination = new RectF();
+        private final Rect backgroundSource = new Rect();
+        private final RectF backgroundDestination = new RectF();
 
         private SensorManager sensorManager;
         private Sensor accelerometer;
@@ -68,6 +74,7 @@ public class RainWallpaperService extends WallpaperService {
         private boolean visible;
         private boolean surfaceReady;
         private boolean rebuildRequired = true;
+        private boolean backgroundReloadRequired = true;
 
         private int width;
         private int height;
@@ -79,6 +86,8 @@ public class RainWallpaperService extends WallpaperService {
         private int tailCells;
         private List<MatrixColumn> columns = new ArrayList<>();
         private GlyphAtlas atlas;
+        private Bitmap backgroundBitmap;
+        private String loadedBackgroundUri;
 
         private long lastFrameMs;
         private float animatedTimeMs;
@@ -118,6 +127,7 @@ public class RainWallpaperService extends WallpaperService {
             unregisterSensor();
             prefs.unregisterOnSharedPreferenceChangeListener(this);
             if (atlas != null) atlas.recycle();
+            recycleBackgroundBitmap();
         }
 
         @Override
@@ -141,6 +151,7 @@ public class RainWallpaperService extends WallpaperService {
             this.height = height;
             surfaceReady = true;
             rebuildRequired = true;
+            backgroundReloadRequired = true;
             drawFrame();
         }
 
@@ -157,6 +168,12 @@ public class RainWallpaperService extends WallpaperService {
                     Config.KEY_TAIL.equals(key) || Config.KEY_PHRASE.equals(key) ||
                     Config.KEY_PHRASES.equals(key)) {
                 rebuildRequired = true;
+            }
+            if (Config.KEY_IMAGE_URI.equals(key) || Config.KEY_BACKGROUND_MODE.equals(key)) {
+                backgroundReloadRequired = true;
+                if (Config.backgroundMode(prefs) == Config.BACKGROUND_SOLID) {
+                    recycleBackgroundBitmap();
+                }
             }
             if (Config.KEY_PARALLAX.equals(key)) updateSensorRegistration();
             handler.removeCallbacks(drawRunnable);
@@ -226,11 +243,89 @@ public class RainWallpaperService extends WallpaperService {
             try {
                 canvas = holder.lockCanvas();
                 if (canvas == null) return;
-                canvas.drawColor(Color.BLACK);
+                renderBackground(canvas);
                 renderRain(canvas, animatedTimeMs);
             } finally {
                 if (canvas != null) holder.unlockCanvasAndPost(canvas);
             }
+        }
+
+        private void renderBackground(Canvas canvas) {
+            canvas.drawColor(Config.backgroundColor(prefs));
+            if (Config.backgroundMode(prefs) != Config.BACKGROUND_IMAGE) return;
+
+            String uriText = Config.imageUri(prefs);
+            if (uriText == null || uriText.trim().isEmpty()) return;
+
+            if (backgroundReloadRequired || backgroundBitmap == null || !uriText.equals(loadedBackgroundUri)) {
+                loadBackgroundBitmap(uriText);
+            }
+            if (backgroundBitmap == null || backgroundBitmap.isRecycled()) return;
+
+            int opacity = Config.backgroundImageOpacity(prefs);
+            if (opacity <= 0) return;
+
+            int bitmapWidth = backgroundBitmap.getWidth();
+            int bitmapHeight = backgroundBitmap.getHeight();
+            if (bitmapWidth <= 0 || bitmapHeight <= 0 || width <= 0 || height <= 0) return;
+
+            float sourceAspect = bitmapWidth / (float) bitmapHeight;
+            float targetAspect = width / (float) height;
+            if (sourceAspect > targetAspect) {
+                int cropWidth = Math.max(1, Math.round(bitmapHeight * targetAspect));
+                int left = Math.max(0, (bitmapWidth - cropWidth) / 2);
+                backgroundSource.set(left, 0, Math.min(bitmapWidth, left + cropWidth), bitmapHeight);
+            } else {
+                int cropHeight = Math.max(1, Math.round(bitmapWidth / targetAspect));
+                int top = Math.max(0, (bitmapHeight - cropHeight) / 2);
+                backgroundSource.set(0, top, bitmapWidth, Math.min(bitmapHeight, top + cropHeight));
+            }
+
+            backgroundDestination.set(0f, 0f, width, height);
+            backgroundPaint.setAlpha(Math.max(0, Math.min(255, Math.round(opacity * 2.55f))));
+            canvas.drawBitmap(backgroundBitmap, backgroundSource, backgroundDestination, backgroundPaint);
+            backgroundPaint.setAlpha(255);
+        }
+
+        private void loadBackgroundBitmap(String uriText) {
+            backgroundReloadRequired = false;
+            recycleBackgroundBitmap();
+            loadedBackgroundUri = uriText;
+
+            try {
+                Uri uri = Uri.parse(uriText);
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                try (InputStream input = getContentResolver().openInputStream(uri)) {
+                    if (input == null) return;
+                    BitmapFactory.decodeStream(input, null, bounds);
+                }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return;
+
+                int targetMax = Math.max(1080, Math.max(width, height));
+                int sample = 1;
+                while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > targetMax * 1.4f) {
+                    sample *= 2;
+                }
+
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = Math.max(1, sample);
+                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                try (InputStream input = getContentResolver().openInputStream(uri)) {
+                    if (input == null) return;
+                    backgroundBitmap = BitmapFactory.decodeStream(input, null, options);
+                }
+            } catch (Exception ignored) {
+                recycleBackgroundBitmap();
+                loadedBackgroundUri = uriText;
+            }
+        }
+
+        private void recycleBackgroundBitmap() {
+            if (backgroundBitmap != null && !backgroundBitmap.isRecycled()) {
+                backgroundBitmap.recycle();
+            }
+            backgroundBitmap = null;
         }
 
         private void renderRain(Canvas canvas, float timeMs) {
