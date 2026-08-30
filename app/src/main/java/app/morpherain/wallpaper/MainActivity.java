@@ -108,7 +108,7 @@ public class MainActivity extends Activity {
         addPalettePreview(Config.imagePalette(prefs));
 
         addSection("Background");
-        TextView backgroundHelp = text("Use a plain colour behind the rain, or reuse the palette-source image. Image opacity controls how strongly the photo shows through; the selected solid colour remains underneath it.", 13, Color.LTGRAY);
+        TextView backgroundHelp = text("Use a plain colour behind the rain, or reuse the palette-source image. The image can now be fitted, zoomed and repositioned. The selected solid colour remains underneath it.", 13, Color.LTGRAY);
         backgroundHelp.setPadding(0, 0, 0, dp(8));
         content.addView(backgroundHelp);
 
@@ -124,17 +124,66 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, "Choose a palette image first", Toast.LENGTH_SHORT).show();
                 prefs.edit().putInt(Config.KEY_BACKGROUND_MODE, Config.BACKGROUND_SOLID).apply();
                 backgroundMode.setSelection(Config.BACKGROUND_SOLID);
-            } else {
+            } else if (position != Config.backgroundMode(prefs)) {
                 prefs.edit().putInt(Config.KEY_BACKGROUND_MODE, position).apply();
+                buildUi();
             }
         }));
         content.addView(backgroundMode, matchWrap());
 
         addBackgroundColorControl("Background colour", Config.backgroundColor(prefs));
-        addSeek("Background image opacity", 0, 100, Config.backgroundImageOpacity(prefs),
-                value -> prefs.edit().putInt(Config.KEY_BACKGROUND_IMAGE_OPACITY, value).apply(), "%");
 
-        if (Config.imageUri(prefs) == null) {
+        if (Config.backgroundMode(prefs) == Config.BACKGROUND_IMAGE && Config.imageUri(prefs) != null) {
+            addSeek("Background image opacity", 0, 100, Config.backgroundImageOpacity(prefs),
+                    value -> prefs.edit().putInt(Config.KEY_BACKGROUND_IMAGE_OPACITY, value).apply(), "%");
+
+            TextView fitLabel = text("Image framing", 14, Color.LTGRAY);
+            fitLabel.setPadding(0, dp(12), 0, dp(3));
+            content.addView(fitLabel);
+
+            Spinner fitMode = new Spinner(this);
+            String[] fitModes = {
+                    "Fill screen (crop)",
+                    "Fit entire image",
+                    "Manual framing"
+            };
+            ArrayAdapter<String> fitAdapter = new ArrayAdapter<>(this,
+                    android.R.layout.simple_spinner_dropdown_item, fitModes);
+            fitMode.setAdapter(fitAdapter);
+            fitMode.setSelection(Math.max(0, Math.min(fitModes.length - 1,
+                    Config.backgroundFitMode(prefs))));
+            fitMode.setOnItemSelectedListener(new SimpleItemSelectedListener(position -> {
+                if (position != Config.backgroundFitMode(prefs)) {
+                    prefs.edit().putInt(Config.KEY_BACKGROUND_FIT_MODE, position).apply();
+                    buildUi();
+                }
+            }));
+            content.addView(fitMode, matchWrap());
+
+            if (Config.backgroundFitMode(prefs) == Config.FIT_MANUAL) {
+                TextView manualHelp = text("100% shows the whole image fitted to the screen. Go below 100% to zoom farther out, or above 100% to crop in. Position sliders move the image within the available space/crop.", 12, Color.GRAY);
+                manualHelp.setPadding(0, dp(6), 0, dp(8));
+                content.addView(manualHelp);
+
+                addSeek("Background zoom", 50, 200, Config.backgroundZoomPercent(prefs),
+                        value -> prefs.edit().putInt(Config.KEY_BACKGROUND_ZOOM, value).apply(), "%");
+                addSeek("Horizontal position", -100, 100, Config.backgroundOffsetX(prefs),
+                        value -> prefs.edit().putInt(Config.KEY_BACKGROUND_OFFSET_X, value).apply(), "");
+                addSeek("Vertical position", -100, 100, Config.backgroundOffsetY(prefs),
+                        value -> prefs.edit().putInt(Config.KEY_BACKGROUND_OFFSET_Y, value).apply(), "");
+
+                Button resetFraming = button("Reset framing");
+                resetFraming.setOnClickListener(v -> {
+                    prefs.edit()
+                            .putInt(Config.KEY_BACKGROUND_ZOOM, 100)
+                            .putInt(Config.KEY_BACKGROUND_OFFSET_X, 0)
+                            .putInt(Config.KEY_BACKGROUND_OFFSET_Y, 0)
+                            .apply();
+                    buildUi();
+                });
+                content.addView(resetFraming);
+            }
+        } else if (Config.imageUri(prefs) == null) {
             TextView noImage = text("No palette-source image is currently stored. Select one in the Colour section to enable image background mode.", 12, Color.GRAY);
             noImage.setPadding(0, dp(2), 0, 0);
             content.addView(noImage);
