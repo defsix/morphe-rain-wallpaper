@@ -9,11 +9,11 @@ Morphe Rain started as a faithful standalone port of Morphe's Matrix renderer an
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/home.svg" width="210" alt="Morphe Rain on the Android home screen" />
+  <img src="docs/screenshots/wallpaper.jpg" width="210" alt="Morphe Rain live wallpaper preview" />
   &nbsp;&nbsp;
-  <img src="docs/screenshots/palette.svg" width="210" alt="Image-derived palette settings" />
+  <img src="docs/screenshots/palette.jpg" width="210" alt="Image-derived palette settings" />
   &nbsp;&nbsp;
-  <img src="docs/screenshots/controls.svg" width="210" alt="Hidden phrase and rain controls" />
+  <img src="docs/screenshots/controls.jpg" width="210" alt="Hidden phrase and rain controls" />
 </p>
 
 ## What matches the Morphe Easter egg
