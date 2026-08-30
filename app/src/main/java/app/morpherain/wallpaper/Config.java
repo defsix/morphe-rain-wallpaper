@@ -4,17 +4,25 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+
 final class Config {
     static final String PREFS = "morphe_rain_settings";
 
     static final String KEY_COLOR_MODE = "color_mode";
     static final String KEY_START_HUE = "start_hue";
     static final String KEY_END_HUE = "end_hue";
+    static final String KEY_START_COLOR = "start_color";
+    static final String KEY_END_COLOR = "end_color";
+    static final String KEY_IMAGE_PALETTE = "image_palette";
     static final String KEY_SPEED = "speed_percent";
     static final String KEY_GLYPH = "glyph_dp";
     static final String KEY_SPACING = "spacing_percent";
     static final String KEY_TAIL = "tail_cells";
     static final String KEY_PHRASE = "phrase_percent";
+    static final String KEY_PHRASES = "hidden_phrases";
     static final String KEY_PARALLAX = "parallax";
     static final String KEY_FPS = "fps";
     static final String KEY_CYCLE_SECONDS = "cycle_seconds";
@@ -23,9 +31,11 @@ final class Config {
     static final int MODE_GREEN = 1;
     static final int MODE_CUSTOM = 2;
     static final int MODE_RAINBOW = 3;
+    static final int MODE_IMAGE = 4;
 
     static final int MORPHE_START = Color.rgb(0x1E, 0x5A, 0xA8);
     static final int MORPHE_END = Color.rgb(0x00, 0xAF, 0xAE);
+    static final String DEFAULT_PHRASES = "USE MORPHE\nNO ADS\nWAKE UP\nPATCHED";
 
     private Config() {}
 
@@ -43,18 +53,25 @@ final class Config {
     static int fps(SharedPreferences p) { return p.getInt(KEY_FPS, 60); }
     static int cycleSeconds(SharedPreferences p) { return p.getInt(KEY_CYCLE_SECONDS, 45); }
 
+    static int customStart(SharedPreferences p) {
+        if (p.contains(KEY_START_COLOR)) return p.getInt(KEY_START_COLOR, MORPHE_START);
+        float hue = p.getInt(KEY_START_HUE, 210);
+        return Color.HSVToColor(new float[]{hue, 0.82f, 0.72f});
+    }
+
+    static int customEnd(SharedPreferences p) {
+        if (p.contains(KEY_END_COLOR)) return p.getInt(KEY_END_COLOR, MORPHE_END);
+        float hue = p.getInt(KEY_END_HUE, 180);
+        return Color.HSVToColor(new float[]{hue, 0.88f, 0.76f});
+    }
+
     static int[] gradient(SharedPreferences p, float timeMs) {
         int mode = mode(p);
         if (mode == MODE_GREEN) {
             return new int[]{Color.rgb(0x00, 0x9A, 0x55), Color.rgb(0x66, 0xFF, 0xAA)};
         }
         if (mode == MODE_CUSTOM) {
-            float startHue = p.getInt(KEY_START_HUE, 210);
-            float endHue = p.getInt(KEY_END_HUE, 180);
-            return new int[]{
-                    Color.HSVToColor(new float[]{startHue, 0.82f, 0.72f}),
-                    Color.HSVToColor(new float[]{endHue, 0.88f, 0.76f})
-            };
+            return new int[]{customStart(p), customEnd(p)};
         }
         if (mode == MODE_RAINBOW) {
             float seconds = Math.max(10, cycleSeconds(p));
@@ -64,7 +81,61 @@ final class Config {
                     Color.HSVToColor(new float[]{(base + 55f) % 360f, 0.88f, 0.82f})
             };
         }
+        if (mode == MODE_IMAGE) {
+            return imagePalette(p);
+        }
         return new int[]{MORPHE_START, MORPHE_END};
+    }
+
+    static String phrasesText(SharedPreferences p) {
+        return p.getString(KEY_PHRASES, DEFAULT_PHRASES);
+    }
+
+    static String[] phrases(SharedPreferences p) {
+        String raw = phrasesText(p);
+        if (raw == null) raw = DEFAULT_PHRASES;
+        String[] lines = raw.replace('\r', '\n').split("\\n+");
+        List<String> result = new ArrayList<>();
+        for (String line : lines) {
+            String phrase = line.trim();
+            if (phrase.isEmpty()) continue;
+            if (phrase.length() > 32) phrase = phrase.substring(0, 32);
+            result.add(phrase);
+            if (result.size() >= 20) break;
+        }
+        if (result.isEmpty()) {
+            return DEFAULT_PHRASES.split("\\n");
+        }
+        return result.toArray(new String[0]);
+    }
+
+    static int[] imagePalette(SharedPreferences p) {
+        String raw = p.getString(KEY_IMAGE_PALETTE, null);
+        if (raw == null || raw.trim().isEmpty()) {
+            return new int[]{MORPHE_START, MORPHE_END};
+        }
+        String[] parts = raw.split(",");
+        List<Integer> colors = new ArrayList<>();
+        for (String part : parts) {
+            try {
+                colors.add(Color.parseColor(part.trim()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        if (colors.size() < 2) return new int[]{MORPHE_START, MORPHE_END};
+        int[] out = new int[colors.size()];
+        for (int i = 0; i < colors.size(); i++) out[i] = colors.get(i);
+        return out;
+    }
+
+    static String encodePalette(int[] colors) {
+        if (colors == null || colors.length == 0) return "";
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < colors.length; i++) {
+            if (i > 0) builder.append(',');
+            builder.append(String.format(Locale.ROOT, "#%02X%02X%02X",
+                    Color.red(colors[i]), Color.green(colors[i]), Color.blue(colors[i])));
+        }
+        return builder.toString();
     }
 
     static void reset(SharedPreferences p) {
