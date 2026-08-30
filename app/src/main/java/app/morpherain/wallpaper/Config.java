@@ -76,7 +76,7 @@ final class Config {
         return Math.max(0, Math.min(100, p.getInt(KEY_BACKGROUND_IMAGE_OPACITY, 35)));
     }
     static int backgroundFitMode(SharedPreferences p) {
-        return Math.max(FIT_FILL, Math.min(FIT_MANUAL, p.getInt(KEY_BACKGROUND_FIT_MODE, FIT_FILL)));
+        return Math.max(FIT_FILL, Math.min(FIT_MANUAL, p.getInt(KEY_BACKGROUND_FIT_MODE, FIT_INSIDE)));
     }
     static int backgroundZoomPercent(SharedPreferences p) {
         return Math.max(50, Math.min(200, p.getInt(KEY_BACKGROUND_ZOOM, 100)));
