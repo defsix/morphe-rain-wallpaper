@@ -8,7 +8,6 @@ import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -29,7 +28,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_PICK_IMAGE = 4102;
@@ -345,11 +343,11 @@ public class MainActivity extends Activity {
             if (preview != null) {
                 ImageView image = new ImageView(this);
                 image.setImageBitmap(preview);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 image.setAdjustViewBounds(false);
                 image.setBackgroundColor(Color.rgb(20, 20, 20));
                 content.addView(image, new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(180)));
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(220)));
             }
         } catch (IOException ignored) {
             TextView unavailable = text("Image preview unavailable. The saved palette will still work.", 12, Color.GRAY);
@@ -446,23 +444,7 @@ public class MainActivity extends Activity {
     }
 
     private Bitmap decodeSampledBitmap(Uri uri, int maxSide) throws IOException {
-        BitmapFactory.Options bounds = new BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        try (InputStream input = getContentResolver().openInputStream(uri)) {
-            if (input == null) return null;
-            BitmapFactory.decodeStream(input, null, bounds);
-        }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
-
-        int sample = 1;
-        while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > maxSide) sample *= 2;
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inSampleSize = sample;
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-        try (InputStream input = getContentResolver().openInputStream(uri)) {
-            if (input == null) return null;
-            return BitmapFactory.decodeStream(input, null, options);
-        }
+        return ImageUtils.decodeOrientedBitmap(this, uri, maxSide);
     }
 
     private void openWallpaperPicker() {
