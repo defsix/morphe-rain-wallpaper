@@ -17,6 +17,8 @@ final class Config {
     static final String KEY_START_COLOR = "start_color";
     static final String KEY_END_COLOR = "end_color";
     static final String KEY_IMAGE_PALETTE = "image_palette";
+    static final String KEY_IMAGE_URI = "image_palette_source_uri";
+    static final String KEY_PALETTE_VIVIDNESS = "palette_vividness_percent";
     static final String KEY_SPEED = "speed_percent";
     static final String KEY_GLYPH = "glyph_dp";
     static final String KEY_SPACING = "spacing_percent";
@@ -52,6 +54,8 @@ final class Config {
     static boolean parallax(SharedPreferences p) { return p.getBoolean(KEY_PARALLAX, true); }
     static int fps(SharedPreferences p) { return p.getInt(KEY_FPS, 60); }
     static int cycleSeconds(SharedPreferences p) { return p.getInt(KEY_CYCLE_SECONDS, 45); }
+    static int paletteVividness(SharedPreferences p) { return p.getInt(KEY_PALETTE_VIVIDNESS, 75); }
+    static String imageUri(SharedPreferences p) { return p.getString(KEY_IMAGE_URI, null); }
 
     static int customStart(SharedPreferences p) {
         if (p.contains(KEY_START_COLOR)) return p.getInt(KEY_START_COLOR, MORPHE_START);
@@ -103,9 +107,7 @@ final class Config {
             result.add(phrase);
             if (result.size() >= 20) break;
         }
-        if (result.isEmpty()) {
-            return DEFAULT_PHRASES.split("\\n");
-        }
+        if (result.isEmpty()) return DEFAULT_PHRASES.split("\\n");
         return result.toArray(new String[0]);
     }
 
