@@ -19,6 +19,9 @@ final class Config {
     static final String KEY_IMAGE_PALETTE = "image_palette";
     static final String KEY_IMAGE_URI = "image_palette_source_uri";
     static final String KEY_PALETTE_VIVIDNESS = "palette_vividness_percent";
+    static final String KEY_BACKGROUND_MODE = "background_mode";
+    static final String KEY_BACKGROUND_COLOR = "background_color";
+    static final String KEY_BACKGROUND_IMAGE_OPACITY = "background_image_opacity_percent";
     static final String KEY_SPEED = "speed_percent";
     static final String KEY_GLYPH = "glyph_dp";
     static final String KEY_SPACING = "spacing_percent";
@@ -34,6 +37,9 @@ final class Config {
     static final int MODE_CUSTOM = 2;
     static final int MODE_RAINBOW = 3;
     static final int MODE_IMAGE = 4;
+
+    static final int BACKGROUND_SOLID = 0;
+    static final int BACKGROUND_IMAGE = 1;
 
     static final int MORPHE_START = Color.rgb(0x1E, 0x5A, 0xA8);
     static final int MORPHE_END = Color.rgb(0x00, 0xAF, 0xAE);
@@ -56,6 +62,11 @@ final class Config {
     static int cycleSeconds(SharedPreferences p) { return p.getInt(KEY_CYCLE_SECONDS, 45); }
     static int paletteVividness(SharedPreferences p) { return p.getInt(KEY_PALETTE_VIVIDNESS, 75); }
     static String imageUri(SharedPreferences p) { return p.getString(KEY_IMAGE_URI, null); }
+    static int backgroundMode(SharedPreferences p) { return p.getInt(KEY_BACKGROUND_MODE, BACKGROUND_SOLID); }
+    static int backgroundColor(SharedPreferences p) { return p.getInt(KEY_BACKGROUND_COLOR, Color.BLACK); }
+    static int backgroundImageOpacity(SharedPreferences p) {
+        return Math.max(0, Math.min(100, p.getInt(KEY_BACKGROUND_IMAGE_OPACITY, 35)));
+    }
 
     static int customStart(SharedPreferences p) {
         if (p.contains(KEY_START_COLOR)) return p.getInt(KEY_START_COLOR, MORPHE_START);
