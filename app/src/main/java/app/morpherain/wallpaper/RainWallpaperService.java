@@ -2,7 +2,6 @@ package app.morpherain.wallpaper;
 
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -22,7 +21,6 @@ import android.os.SystemClock;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -310,27 +308,12 @@ public class RainWallpaperService extends WallpaperService {
 
             try {
                 Uri uri = Uri.parse(uriText);
-                BitmapFactory.Options bounds = new BitmapFactory.Options();
-                bounds.inJustDecodeBounds = true;
-                try (InputStream input = getContentResolver().openInputStream(uri)) {
-                    if (input == null) return;
-                    BitmapFactory.decodeStream(input, null, bounds);
-                }
-                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return;
-
                 int targetMax = Math.max(1080, Math.max(width, height));
-                int sample = 1;
-                while (Math.max(bounds.outWidth / sample, bounds.outHeight / sample) > targetMax * 1.4f) {
-                    sample *= 2;
-                }
-
-                BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inSampleSize = Math.max(1, sample);
-                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                try (InputStream input = getContentResolver().openInputStream(uri)) {
-                    if (input == null) return;
-                    backgroundBitmap = BitmapFactory.decodeStream(input, null, options);
-                }
+                backgroundBitmap = ImageUtils.decodeOrientedBitmap(
+                        RainWallpaperService.this,
+                        uri,
+                        Math.round(targetMax * 1.4f)
+                );
             } catch (Exception ignored) {
                 recycleBackgroundBitmap();
                 loadedBackgroundUri = uriText;
