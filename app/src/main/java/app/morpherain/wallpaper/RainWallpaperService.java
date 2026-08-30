@@ -1,6 +1,5 @@
 package app.morpherain.wallpaper;
 
-import android.app.WallpaperManager;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -55,7 +54,7 @@ public class RainWallpaperService extends WallpaperService {
                 '0','1','0','1','0','1','A','B','C','D','E','F',
                 '2','3','4','5','6','7','8','9',':',';','/','<','>'
         };
-        private final String[] phrases = new String[]{"USE MORPHE", "NO ADS", "WAKE UP", "PATCHED"};
+        private String[] phrases = Config.DEFAULT_PHRASES.split("\\n");
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final Random random = new Random();
         private final SharedPreferences prefs = Config.prefs(RainWallpaperService.this);
@@ -155,7 +154,8 @@ public class RainWallpaperService extends WallpaperService {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
             if (Config.KEY_GLYPH.equals(key) || Config.KEY_SPACING.equals(key) ||
-                    Config.KEY_TAIL.equals(key) || Config.KEY_PHRASE.equals(key)) {
+                    Config.KEY_TAIL.equals(key) || Config.KEY_PHRASE.equals(key) ||
+                    Config.KEY_PHRASES.equals(key)) {
                 rebuildRequired = true;
             }
             if (Config.KEY_PARALLAX.equals(key)) updateSensorRegistration();
@@ -172,6 +172,7 @@ public class RainWallpaperService extends WallpaperService {
             rowStep = glyphPx * ROW_STEP_RATIO;
             rowCount = Math.max(1, (int) (height / rowStep));
             tailCells = Config.tail(prefs);
+            phrases = Config.phrases(prefs);
 
             if (atlas != null) atlas.recycle();
             atlas = new GlyphAtlas(glyphPx, randomGlyphs, phrases);
@@ -190,7 +191,10 @@ public class RainWallpaperService extends WallpaperService {
         }
 
         private MatrixStream randomStream(float phraseChance) {
-            String phrase = random.nextFloat() < phraseChance ? phrases[random.nextInt(phrases.length)] : null;
+            String phrase = null;
+            if (phrases.length > 0 && random.nextFloat() < phraseChance) {
+                phrase = phrases[random.nextInt(phrases.length)];
+            }
             int[] phraseGlyphs = phrase == null ? null : atlas.toIndices(phrase);
             float fallSpeed = phrase != null
                     ? 0.002f + random.nextFloat() * 0.002f
@@ -248,7 +252,7 @@ public class RainWallpaperService extends WallpaperService {
                 MatrixColumn column = columns.get(columnIndex);
                 float x = columnIndex * columnStep + columnStep / 2f + parallaxX;
                 float position = count == 1 ? 0f : columnIndex / (float) (count - 1);
-                int trailColor = blend(gradient[0], gradient[1], position);
+                int trailColor = sampleGradient(gradient, position);
                 int headColor = blend(trailColor, Color.WHITE, 0.55f);
 
                 for (MatrixStream stream : column.streams) {
@@ -280,6 +284,16 @@ public class RainWallpaperService extends WallpaperService {
             }
             glyphPaint.setColorFilter(null);
             glyphPaint.setAlpha(255);
+        }
+
+        private int sampleGradient(int[] colors, float position) {
+            if (colors == null || colors.length == 0) return Color.WHITE;
+            if (colors.length == 1) return colors[0];
+            position = Math.max(0f, Math.min(1f, position));
+            float scaled = position * (colors.length - 1);
+            int segment = Math.min(colors.length - 2, (int) Math.floor(scaled));
+            float local = scaled - segment;
+            return blend(colors[segment], colors[segment + 1], local);
         }
 
         private int blend(int from, int to, float fraction) {
